@@ -1,0 +1,24 @@
+2025-03-16 08:04:45,946 - INFO - Gemini LLM initialized successfully
+2025-03-16 08:07:19,438 - INFO - Gemini LLM initialized successfully
+2025-03-16 08:07:44,872 - INFO - Initializing RAG components for gemini...
+2025-03-16 08:07:44,872 - INFO - Initializing RAG components for gemini...
+2025-03-16 08:07:44,959 - INFO - LLM (gemini) initialized successfully
+2025-03-16 08:07:44,959 - INFO - LLM (gemini) initialized successfully
+2025-03-16 08:07:44,966 - INFO - New question received
+2025-03-16 08:07:44,966 - INFO - New question received
+2025-03-16 08:07:51,330 - INFO - New question received
+2025-03-16 08:07:51,330 - INFO - New question received
+2025-03-16 08:07:52,762 - INFO - New question received
+2025-03-16 08:07:52,762 - INFO - New question received
+2025-03-16 08:09:40,391 - INFO - Initializing RAG components for gemini...
+2025-03-16 08:09:40,391 - INFO - Initializing RAG components for gemini...
+2025-03-16 08:09:40,478 - INFO - LLM (gemini) initialized successfully
+2025-03-16 08:09:40,478 - INFO - LLM (gemini) initialized successfully
+2025-03-16 08:09:40,540 - INFO - New question received
+2025-03-16 08:09:40,540 - INFO - New question received
+2025-03-16 08:09:45,759 - INFO - New question received
+2025-03-16 08:09:45,759 - INFO - New question received
+2025-03-16 08:09:47,554 - INFO - New question received
+2025-03-16 08:09:47,554 - INFO - New question received
+2025-03-16 08:09:51,137 - INFO - New question received
+2025-03-16 08:09:51,137 - INFO - New question received
