@@ -2,7 +2,7 @@ import os
 import threading
 from sqlalchemy import make_url
 from my_library.utilities import read_config
-from logger import setup_logger
+from my_library.logger import setup_logger
 # Initialize the logger
 logger = setup_logger()
 
