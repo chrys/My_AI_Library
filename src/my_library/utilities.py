@@ -29,7 +29,7 @@ def read_config(section: str, key: str) -> str:
 
     # Set the config path based on the environment
     if environment == 'production':
-        config_path = os.path.expanduser('~/etc/django-secrets/.config.ini')
+        config_path = os.path.expanduser('/etc/django-secrets/.config.ini')
     else:
         config_path = os.path.expanduser('~/.config.ini')
     
