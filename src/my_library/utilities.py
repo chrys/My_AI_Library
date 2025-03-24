@@ -25,7 +25,7 @@ def read_config(section: str, key: str) -> str:
         KeyError: If the section or key is not found in the config file.
     """
     # Determine the environment
-    environment = os.getenv('DJANGO_ENV', 'local')
+    environment = os.getenv('WHAT_ENV', 'local')
 
     # Set the config path based on the environment
     if environment == 'production':
