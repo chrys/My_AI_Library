@@ -3,7 +3,7 @@ import os
 
 def read_config(section: str, key: str) -> str:
     """
-    Read sensitive data from the configuration file ~/.config.ini.
+    Read sensitive data from the configuration file.
 
     Business Requirement:
     - Read sensitive data securely.
@@ -24,7 +24,14 @@ def read_config(section: str, key: str) -> str:
         FileNotFoundError: If the config file does not exist.
         KeyError: If the section or key is not found in the config file.
     """
-    config_path = os.path.expanduser('~/.config.ini')
+    # Determine the environment
+    environment = os.getenv('DJANGO_ENV', 'local')
+
+    # Set the config path based on the environment
+    if environment == 'production':
+        config_path = os.path.expanduser('~/etc/django-secrets/.config.ini')
+    else:
+        config_path = os.path.expanduser('~/.config.ini')
     
     # Check if the config file exists
     if not os.path.exists(config_path):
