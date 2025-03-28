@@ -16,10 +16,16 @@ from llama_index.core import (
   )
 
 from llama_index.embeddings.openai import OpenAIEmbedding
-from llama_index.embeddings.gemini import GeminiEmbedding
+from llama_index.embeddings.google_genai import GoogleGenAIEmbedding
+from google.genai.types import EmbedContentConfig
 from llama_index.vector_stores.postgres import PGVectorStore
 from llama_index.llms.anthropic import Anthropic
-from llama_index.llms.gemini import Gemini
+from llama_index.llms.google_genai import GoogleGenAI
+
+from llama_index.readers.web import SimpleWebPageReader
+
+from my_library.parse_csv import parse_qa_csv
+
 
   # Singleton instance store with thread-safety
 class RAGServiceManager:
@@ -70,10 +76,15 @@ class RAGService:
             self._initialize_llm()
 
             # Initialize embeddings
-            self.embed_model = GeminiEmbedding(
+            # self.embed_model = GeminiEmbedding(
+            #     model="models/text-embedding-004",
+            #     dimensions=EMBED_DIMENSION
+            # )
+            self.embed_model = GoogleGenAIEmbedding(
                 model="models/text-embedding-004",
-                dimensions=EMBED_DIMENSION
+                dimensions=EMBED_DIMENSION,
             )
+            
             Settings.embed_model = self.embed_model
 
             # Initialize vector store
@@ -94,7 +105,7 @@ class RAGService:
                 self.logger.error("Failed to create index from vector store")
                 return False
 
-            self.retriever = self.index.as_retriever()
+            self.retriever = self.index.as_retriever(similarity_top_k=3) #let's start with 3 top chunks
             if not self.retriever:
                 self.logger.error("Failed to create retriever")
                 return False
@@ -124,7 +135,7 @@ class RAGService:
             if not api_key:
                 raise ValueError("Gemini keys not found in environment variables")
             os.environ["GOOGLE_API_KEY"] = api_key
-            self.llm = Gemini(model="models/gemini-2.0-flash-lite")
+            self.llm = GoogleGenAI(model="models/gemini-2.0-flash-lite")
 
         else:
             raise ValueError("Invalid model name. Use 'openai', 'claude', or 'gemini'")
@@ -146,14 +157,27 @@ class RAGService:
             # Each thread gets its own prompt instance
             if not hasattr(self.local, 'prompt'):
                 #template = "Based on the following context, please answer the question: {message}\n\nContext: {context}"
-                template = f"""
-                You are a a friendly customer service agent for Vasilias Weddings named Valias Bot. 
-                A customer asks: "{message}"
-                Provide a direct and natural answer to the following question without adding any greeting. 
-                Do not start with phrases like "Based on the context".
-                If the question is outside of the knowledge base answer the following:
-                "I am unable to assist with that. I will connect you with a human agent."
-                """
+                #google gemini template shouldn't exceed 4000 characters
+                template = """
+                    You are a helpful and friendly chatbot named VasiliasBot assisting customers of Vasilias Weddings.
+                    You are a dedicated customer service representative whose primary goal is to provide information and assistance related to Vasilias Weddings based *exclusively* on the knowledge provided in the context below. You must stick to the context. Do not hallucinate answers.
+
+                    **Instructions:**
+
+                    1.  **Knowledge Source:** You *must* answer questions *only* based on the information provided in the **Context** section below. Do not use any external knowledge or prior assumptions.
+                    2.  **Handling Missing Information:** If the answer to the user's query cannot be confidently determined from the provided **Context**, politely state that you don't have that specific information based on the available website content. Do not invent an answer. Suggest contacting Vasilias Weddings directly for specifics if appropriate (e.g., "I couldn't find the exact details about that in the information I have access to. For the most accurate information, please reach out to Vasilias Weddings directly.").
+                    3.  **Tone and Style:** Respond in a direct, helpful, and natural conversational style. Aim for a professional yet warm and approachable tone. *Do not use overly formal language or overly verbose explanations.* Be concise and to the point. *Do not include conversational fillers or greetings like "Hi" or "Hello" at the start of your response*.
+                    4.  **Focus and Relevance:** Respect the user's time by focusing on providing the most relevant information first. Only respond to the specific question asked in the **User Query**. Do not provide unsolicited extra information.
+                    5.  **Empathy and Support:** Acknowledge that wedding planning can be complex and potentially stressful. Offer support and understanding in your responses. Strive for a balance between showing support and providing clear, concise answers efficiently.
+                    6.  **Accuracy and Corrections:** Prioritize accuracy based on the **Context**. If the user states something incorrect according to the **Context**, gently correct them using an empathizing and supportive tone.
+
+                    **Context:**
+                    {context_str}
+
+                    **User Query:** {query_str}
+
+                    **Response:**
+                    """
                 self.local.prompt = PromptTemplate(template)
 
             # Retrieve documents
@@ -166,11 +190,18 @@ class RAGService:
             context = "\n".join([node.node.text for node in retrieved_nodes])
 
             # Format prompt with context
-            formatted_prompt = self.local.prompt.format(message=message, context=context)
-
+            formatted_prompt = self.local.prompt.format(
+                context=context,
+                query_str=message)
+            
             # Get response using LLM
             response = self.llm.complete(formatted_prompt)
-            return response.text
+            # Return the response
+            if not response or not response.text:
+                return "I couldn't generate a response based on the provided context."
+            else: 
+                self.logger.info("Response generated successfully")
+                return response.text
 
         except Exception as e:
             self.logger.error(f"Error processing question: {str(e)}")
@@ -258,7 +289,7 @@ def index_data(sample_data, llm_model):
             logger.error("Gemini keys not found in environment variables")
             raise ValueError("Gemini keys not found in environment variables")
         os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
-        my_llm = Gemini(model = "models/gemini-2.0-flash-lite")
+        my_llm = GoogleGenAI(model = "models/gemini-2.0-flash-lite")
         Settings.llm = my_llm
         logger.info("Gemini LLM initialized successfully")
 
@@ -270,7 +301,7 @@ def index_data(sample_data, llm_model):
         None
         #TODO code for Claude embedding model
     elif llm_model.lower() == "gemini":
-        my_embed_model = GeminiEmbedding(
+        my_embed_model = GoogleGenAIEmbedding(
             model="models/text-embedding-004",
             dimensions=768
         )
@@ -283,19 +314,7 @@ def index_data(sample_data, llm_model):
     if sample_data.startswith(('http://', 'https://')):
         None
         try:
-            # TODO code for scraping website
-            # url = sample_data,
-            # docs = scrape_website(
-            #     url=url,
-            #     max_pages=100,
-            #     output_file="output/vasilias_content.json"
-            # )
-
-            #if docs:
-            #    print(f"\nSuccessfully scraped {len(docs)} documents")
-            #else:
-            #    print("\nNo documents were scraped")
-            pass
+            documents = SimpleWebPageReader(html_to_text=True).load_data(urls=[sample_data])
         except Exception as e:
             import traceback
             logger(f"\nError occurred: {str(e)}") 
@@ -325,6 +344,22 @@ def store_documents(my_table_name, my_documents):
     Returns:
         bool: True if documents are stored successfully, False otherwise
     """
+    EMBED_DIMENSION = 768
+    
+    api_key = read_config('AI KEYS', 'gemini')
+    if not api_key:
+        raise ValueError("Gemini keys not found in environment variables")
+    os.environ["GOOGLE_API_KEY"] = api_key
+    llm = GoogleGenAI(model="models/gemini-2.0-flash-lite")
+    
+    my_embed_model = GoogleGenAIEmbedding(
+                model="models/text-embedding-004",
+                dimensions=EMBED_DIMENSION,
+            )
+            
+    Settings.embed_model = my_embed_model
+    Settings.llm = llm
+            
     try:
         # Get connection string
         my_connection_string = read_config('CONNECTIONS', 'postgres')
@@ -360,16 +395,17 @@ def store_documents(my_table_name, my_documents):
         logger.error(f"Error storing documents: {str(e)}")
         return False
 
-def test_RAG():
-    # Get RAG service for "vasilias_weddings2" and model "gemini"
-    rag_service = RAGServiceManager.get_instance("vasilias_weddings2", "gemini")
+def test_RAG(table):
+    # Get RAG service for table and model "gemini"
+    rag_service = RAGServiceManager.get_instance(table, "gemini")
     
     # List of questions to ask
     questions = [
-        "Where is Vasilias Weddings?",
-        "When can I get married?",
-        "What is the cost of a wedding?",
-        "Do you offer catering services?",
+        #"Can you help with legal requirements for getting married in Cyprus?", OK 
+        #"Can you recommend vendors for photography, catering, flowers, and entertainment?", OK 
+        #"What is the average cost of a wedding in Cyprus?", OK 
+        #"Can you assist with accommodation for our guests?", OK 
+        "what is the capital of France?", # 
     ]
     
     # Ask each question and print the reply
@@ -383,10 +419,27 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
-    # my_documents = index_data("VW_dataMar25.txt", "gemini")
-    # store_documents("vasilias_weddings2", my_documents)
-    
-    test_RAG()
+    table = "vasilias_weddings3"
+    #my_documents = index_data("VW_dataMar25.txt", "gemini")
+    # vasilias_nikoklis_doc = index_data("https://vasilias.nikoklis.com/", "gemini")
+    # cyprus_wedding_doc = index_data("https://vasilias.nikoklis.com/cyprus-wedding-venue/", "gemini")
+    # my_documents = vasilias_nikoklis_doc + cyprus_wedding_doc
+    # my_documents1 = index_data("https://vasilias.nikoklis.com/vasilias-nikoklis-history/", "gemini")
+    # store_documents("vasilias_weddings3", my_documents1)
+    # my_documents2 = index_data("https://vasilias.nikoklis.com/contact-us/", "gemini")
+    # store_documents("vasilias_weddings3", my_documents2)
+    # qa_docs = parse_qa_csv("VWFAQ.csv")
+    # store_documents("vasilias_faq", qa_docs)
+    # Manually create a document
+    manual_document = [
+        {
+            "text": "Vasilias Weddings is a premier wedding venue in Cyprus, offering a picturesque setting for your special day. We provide comprehensive wedding services, including catering, decoration, and guest accommodation.",
+            "metadata": {"source": "manual_entry", "category": "venue_info"}
+        }
+    ]
+
+    # Store the manually created document
+    store_documents(table, manual_document)
+    test_RAG(table)
      
         
