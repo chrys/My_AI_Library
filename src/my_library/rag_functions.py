@@ -3,6 +3,7 @@ import threading
 from sqlalchemy import make_url
 from my_library.utilities import read_config
 from my_library.logger import setup_logger
+from my_library.wp_scraper import scrape_website
 # Initialize the logger
 logger = setup_logger()
 
@@ -14,6 +15,10 @@ from llama_index.core import (
       PromptTemplate,
       StorageContext,
   )
+
+from llama_index.core.node_parser import (
+    SemanticSplitterNodeParser,
+)
 
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.embeddings.google_genai import GoogleGenAIEmbedding
@@ -308,13 +313,26 @@ def index_data(sample_data, llm_model):
     else:
         raise ValueError("Invalid model name. Use 'gemini', 'claude', or 'openai'")
 
+    splitter = SemanticSplitterNodeParser(
+        buffer_size=1, 
+        breakpoint_percentile_threshold=95, 
+        embed_model=my_embed_model,
+    )
+    Settings.node_parser = splitter
     Settings.embed_model = my_embed_model
 
      # Check if input is URL
     if sample_data.startswith(('http://', 'https://')):
         None
         try:
-            documents = SimpleWebPageReader(html_to_text=True).load_data(urls=[sample_data])
+            #documents = SimpleWebPageReader(html_to_text=True).load_data(urls=[sample_data])
+            documents = scrape_website(sample_data)
+            if not documents:
+                logger.error("No documents found in the URL")
+                raise ValueError("No documents found in the URL")
+            else:
+                logger.info(f"Documents loaded successfully from {sample_data}")
+                return documents
         except Exception as e:
             import traceback
             logger(f"\nError occurred: {str(e)}") 
@@ -401,11 +419,10 @@ def test_RAG(table):
     
     # List of questions to ask
     questions = [
-        #"Can you help with legal requirements for getting married in Cyprus?", OK 
-        #"Can you recommend vendors for photography, catering, flowers, and entertainment?", OK 
-        #"What is the average cost of a wedding in Cyprus?", OK 
+        "Can you recommend wedding suppliers?",  
+        "What is the average cost of a wedding package?", 
         #"Can you assist with accommodation for our guests?", OK 
-        "what is the capital of France?", # 
+        #"what is the capital of France?", OK
     ]
     
     # Ask each question and print the reply
@@ -419,7 +436,7 @@ def main():
 
 if __name__ == "__main__":
     main()
-    table = "vasilias_weddings3"
+    table = "vasilias_weddings290325"
     #my_documents = index_data("VW_dataMar25.txt", "gemini")
     # vasilias_nikoklis_doc = index_data("https://vasilias.nikoklis.com/", "gemini")
     # cyprus_wedding_doc = index_data("https://vasilias.nikoklis.com/cyprus-wedding-venue/", "gemini")
@@ -431,15 +448,18 @@ if __name__ == "__main__":
     # qa_docs = parse_qa_csv("VWFAQ.csv")
     # store_documents("vasilias_faq", qa_docs)
     # Manually create a document
-    manual_document = [
-        {
-            "text": "Vasilias Weddings is a premier wedding venue in Cyprus, offering a picturesque setting for your special day. We provide comprehensive wedding services, including catering, decoration, and guest accommodation.",
-            "metadata": {"source": "manual_entry", "category": "venue_info"}
-        }
-    ]
+    # manual_document = [
+    #     {
+    #         "text": "Vasilias Weddings is a premier wedding venue in Cyprus, offering a picturesque setting for your special day. We provide comprehensive wedding services, including catering, decoration, and guest accommodation.",
+    #         "metadata": {"source": "manual_entry", "category": "venue_info"}
+    #     }
+    # ]
 
     # Store the manually created document
-    store_documents(table, manual_document)
+    #store_documents(table, manual_document)
+    #my_documents = index_data("https://vasilias.nikoklis.com", "gemini")
+   #store_documents(table, my_documents)
+    # Test the RAG service
     test_RAG(table)
      
         
