@@ -12,7 +12,6 @@ from llama_index.core import (
       VectorStoreIndex,
       Settings,
       SimpleDirectoryReader,
-      PromptTemplate,
       StorageContext,
   )
 
@@ -59,6 +58,7 @@ class RAGService:
         self.retriever = None
         self.llm = None
         self.embed_model = None
+        self.chat_engine = None
         self.initialized = False
 
         # Thread-local storage for request context
@@ -114,6 +114,23 @@ class RAGService:
             if not self.retriever:
                 self.logger.error("Failed to create retriever")
                 return False
+            
+            # Initialize ChatEngine
+            self.chat_engine = self.index.as_chat_engine(
+                chat_mode="context",
+                verbose=True,
+                system_prompt="""You are a helpful and friendly chatbot named VasiliasBot assisting customers of Vasilias Weddings.
+                                You are a dedicated customer service representative whose primary goal is to provide information and assistance 
+                                related to Vasilias Weddings based exclusively on the knowledge provided.
+
+                                Guidelines:
+                                1. Answer questions only based on the provided context. Do not use external knowledge.
+                                2. If information isn't available, politely suggest contacting Vasilias Weddings directly.
+                                3. Use a direct, helpful, and natural conversational style.
+                                4. Be concise and avoid unnecessary greetings.
+                                5. Show empathy while maintaining professionalism.
+                                6. Prioritize accuracy based on the context."""
+                            )
 
             self.initialized = True
             return True
@@ -160,30 +177,30 @@ class RAGService:
 
             # Create a query-specific prompt (thread-safe)
             # Each thread gets its own prompt instance
-            if not hasattr(self.local, 'prompt'):
+            #if not hasattr(self.local, 'prompt'):
                 #template = "Based on the following context, please answer the question: {message}\n\nContext: {context}"
                 #google gemini template shouldn't exceed 4000 characters
-                template = """
-                    You are a helpful and friendly chatbot named VasiliasBot assisting customers of Vasilias Weddings.
-                    You are a dedicated customer service representative whose primary goal is to provide information and assistance related to Vasilias Weddings based *exclusively* on the knowledge provided in the context below. You must stick to the context. Do not hallucinate answers.
+                # template = """
+                #     You are a helpful and friendly chatbot named VasiliasBot assisting customers of Vasilias Weddings.
+                #     You are a dedicated customer service representative whose primary goal is to provide information and assistance related to Vasilias Weddings based *exclusively* on the knowledge provided in the context below. You must stick to the context. Do not hallucinate answers.
 
-                    **Instructions:**
+                #     **Instructions:**
 
-                    1.  **Knowledge Source:** You *must* answer questions *only* based on the information provided in the **Context** section below. Do not use any external knowledge or prior assumptions.
-                    2.  **Handling Missing Information:** If the answer to the user's query cannot be confidently determined from the provided **Context**, politely state that you don't have that specific information based on the available website content. Do not invent an answer. Suggest contacting Vasilias Weddings directly for specifics if appropriate (e.g., "I couldn't find the exact details about that in the information I have access to. For the most accurate information, please reach out to Vasilias Weddings directly.").
-                    3.  **Tone and Style:** Respond in a direct, helpful, and natural conversational style. Aim for a professional yet warm and approachable tone. *Do not use overly formal language or overly verbose explanations.* Be concise and to the point. *Do not include conversational fillers or greetings like "Hi" or "Hello" at the start of your response*.
-                    4.  **Focus and Relevance:** Respect the user's time by focusing on providing the most relevant information first. Only respond to the specific question asked in the **User Query**. Do not provide unsolicited extra information.
-                    5.  **Empathy and Support:** Acknowledge that wedding planning can be complex and potentially stressful. Offer support and understanding in your responses. Strive for a balance between showing support and providing clear, concise answers efficiently.
-                    6.  **Accuracy and Corrections:** Prioritize accuracy based on the **Context**. If the user states something incorrect according to the **Context**, gently correct them using an empathizing and supportive tone.
+                #     1.  **Knowledge Source:** You *must* answer questions *only* based on the information provided in the **Context** section below. Do not use any external knowledge or prior assumptions.
+                #     2.  **Handling Missing Information:** If the answer to the user's query cannot be confidently determined from the provided **Context**, politely state that you don't have that specific information based on the available website content. Do not invent an answer. Suggest contacting Vasilias Weddings directly for specifics if appropriate (e.g., "I couldn't find the exact details about that in the information I have access to. For the most accurate information, please reach out to Vasilias Weddings directly.").
+                #     3.  **Tone and Style:** Respond in a direct, helpful, and natural conversational style. Aim for a professional yet warm and approachable tone. *Do not use overly formal language or overly verbose explanations.* Be concise and to the point. *Do not include conversational fillers or greetings like "Hi" or "Hello" at the start of your response*.
+                #     4.  **Focus and Relevance:** Respect the user's time by focusing on providing the most relevant information first. Only respond to the specific question asked in the **User Query**. Do not provide unsolicited extra information.
+                #     5.  **Empathy and Support:** Acknowledge that wedding planning can be complex and potentially stressful. Offer support and understanding in your responses. Strive for a balance between showing support and providing clear, concise answers efficiently.
+                #     6.  **Accuracy and Corrections:** Prioritize accuracy based on the **Context**. If the user states something incorrect according to the **Context**, gently correct them using an empathizing and supportive tone.
 
-                    **Context:**
-                    {context_str}
+                #     **Context:**
+                #     {context_str}
 
-                    **User Query:** {query_str}
+                #     **User Query:** {query_str}
 
-                    **Response:**
-                    """
-                self.local.prompt = PromptTemplate(template)
+                #     **Response:**
+                #     """
+                # self.local.prompt = PromptTemplate(template)
 
             # Retrieve documents
             retrieved_nodes = self.retriever.retrieve(message)
@@ -191,22 +208,24 @@ class RAGService:
             if not retrieved_nodes:
                 return "I couldn't find any relevant information to answer your question."
 
-            # Format context from retrieved nodes
-            context = "\n".join([node.node.text for node in retrieved_nodes])
+            # # Format context from retrieved nodes
+            # context = "\n".join([node.node.text for node in retrieved_nodes])
 
-            # Format prompt with context
-            formatted_prompt = self.local.prompt.format(
-                context=context,
-                query_str=message)
+            # # Format prompt with context
+            # formatted_prompt = self.local.prompt.format(
+            #     context=context,
+            #     query_str=message)
             
             # Get response using LLM
-            response = self.llm.complete(formatted_prompt)
+            #response = self.llm.complete(formatted_prompt)
+            response = self.chat_engine.chat(message)
+            
             # Return the response
-            if not response or not response.text:
+            if not response or not response.response:
                 return "I couldn't generate a response based on the provided context."
             else: 
                 self.logger.info("Response generated successfully")
-                return response.text
+                return response.response
 
         except Exception as e:
             self.logger.error(f"Error processing question: {str(e)}")
@@ -419,9 +438,9 @@ def test_RAG(table):
     
     # List of questions to ask
     questions = [
-        "Can you recommend wedding suppliers?",  
-        "What is the average cost of a wedding package?", 
-        #"Can you assist with accommodation for our guests?", OK 
+        "Can you assist with accommodation for our guests?", 
+        "What is the maximum number of guests you can accommodate?",
+        "Can guests stay in other hotels?",
         #"what is the capital of France?", OK
     ]
     

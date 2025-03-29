@@ -1,5 +1,6 @@
 *.pyc
 __pycache__/
+my_library.egg-info/
 *.pyo
 *.pyd
 .Python
