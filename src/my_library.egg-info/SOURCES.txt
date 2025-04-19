@@ -2,6 +2,7 @@ LICENSE
 README.md
 setup.py
 src/my_library/__init__.py
+src/my_library/evaluate_rag.py
 src/my_library/logger.py
 src/my_library/parse_csv.py
 src/my_library/rag_functions.py

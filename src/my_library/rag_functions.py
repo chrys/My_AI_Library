@@ -1,9 +1,11 @@
 import os
 import threading
 from sqlalchemy import make_url
+import pandas as pd
 from my_library.utilities import read_config
 from my_library.logger import setup_logger
 from my_library.wp_scraper import scrape_website
+
 # Initialize the logger
 logger = setup_logger()
 
@@ -13,6 +15,7 @@ from llama_index.core import (
       Settings,
       SimpleDirectoryReader,
       StorageContext,
+      Document,
   )
 
 from llama_index.core.node_parser import (
@@ -29,8 +32,10 @@ from llama_index.llms.google_genai import GoogleGenAI
 from llama_index.readers.web import SimpleWebPageReader
 
 from my_library.parse_csv import parse_qa_csv
+from llama_index.llms.ollama import Ollama
+from llama_index.embeddings.ollama import OllamaEmbedding
 
-
+MY_EMBED_DIMENSION = 1024
   # Singleton instance store with thread-safety
 class RAGServiceManager:
     _instances = {}
@@ -69,7 +74,6 @@ class RAGService:
         if self.initialized:
             return True
         self.logger.info(f"Initializing RAG components for {self.model_name}...")
-        EMBED_DIMENSION = 768
         try:
             # Get connection string
             my_connection_string = read_config('CONNECTIONS', 'postgres')
@@ -85,13 +89,22 @@ class RAGService:
             #     model="models/text-embedding-004",
             #     dimensions=EMBED_DIMENSION
             # )
-            self.embed_model = GoogleGenAIEmbedding(
-                model="models/text-embedding-004",
-                dimensions=EMBED_DIMENSION,
-            )
+            # if self.model_name.lower() == "gemini":
+            #     self.embed_model = GoogleGenAIEmbedding(
+            #         model="models/text-embedding-004",
+            #         dimensions=MY_EMBED_DIMENSION,
+            #     )
+            # elif self.model_name.lower() == "local":
+            #     self.embed_model = OllamaEmbedding(
+            #         model_name="mxbai-embed-large:latest",
+            #         embed_batch_size=MY_EMBED_DIMENSION
+            #     )
+            # else:
+            #     logger.error("Invalid model name. Use 'gemini' or 'local'")
             
-            Settings.embed_model = self.embed_model
-
+            # Settings.embed_model = self.embed_model
+            # Settings.llm = self.llm
+            
             # Initialize vector store
             url = make_url(my_connection_string)
             self.vector_store = PGVectorStore.from_params(
@@ -101,7 +114,7 @@ class RAGService:
                 port=url.port,
                 user=url.username,
                 table_name=self.table_name,
-                embed_dim=EMBED_DIMENSION,
+                embed_dim=MY_EMBED_DIMENSION,
             )
 
             # Create index and retriever
@@ -158,11 +171,17 @@ class RAGService:
                 raise ValueError("Gemini keys not found in environment variables")
             os.environ["GOOGLE_API_KEY"] = api_key
             self.llm = GoogleGenAI(model="models/gemini-2.0-flash-lite")
-
+        elif self.model_name.lower() == "local":
+            self.llm = Ollama(model="phi3:latest")
+            self.embed_model = OllamaEmbedding(
+                model_name="mxbai-embed-large:latest",
+                embed_batch_size=MY_EMBED_DIMENSION
+            )
         else:
             raise ValueError("Invalid model name. Use 'openai', 'claude', or 'gemini'")
 
         Settings.llm = self.llm
+        Settings.embed_model = self.embed_model
         self.logger.info(f"LLM ({self.model_name}) initialized successfully")
 
     def ask(self, message):
@@ -270,12 +289,13 @@ class RAGService:
 
 #       return render(request, 'chatbot/chat.html')
 
-def index_data(sample_data, llm_model):
+def index_data(sample_data, input_type, llm_model):
     """
     Index data from various sources using specified LLM model.
     
     Args:
         sample_data (str): Path to file/directory or URL
+        input_type (str): Type of input ("file", "url", "csv", "directory")
         llm_model (str): Name of the LLM model to use ("gemini", "claude", "openai")
     
     Returns:
@@ -316,6 +336,13 @@ def index_data(sample_data, llm_model):
         my_llm = GoogleGenAI(model = "models/gemini-2.0-flash-lite")
         Settings.llm = my_llm
         logger.info("Gemini LLM initialized successfully")
+    elif llm_model.lower() == "local":
+        Settings.llm = Ollama(model="phi3:latest")
+        Settings.llm = my_llm
+        logger.info("Local LLM initialized successfully")
+    else:
+        logger.error("Invalid model name. Use 'gemini', 'claude', or 'openai'")
+        raise ValueError("Invalid model name. Use 'gemini', 'claude', or 'local'")
 
     # Initialize Embedding model
     if llm_model.lower() == "openai":
@@ -327,10 +354,16 @@ def index_data(sample_data, llm_model):
     elif llm_model.lower() == "gemini":
         my_embed_model = GoogleGenAIEmbedding(
             model="models/text-embedding-004",
-            dimensions=768
+            dimensions=MY_EMBED_DIMENSION
         )
+    elif llm_model.lower() == "local":
+        my_embed_model = OllamaEmbedding(
+            model_name="mxbai-embed-large:latest",
+            embed_batch_size=MY_EMBED_DIMENSION)
+        Settings.embed_model = my_embed_model
+        logger.info("Local embedding model initialized successfully")
     else:
-        raise ValueError("Invalid model name. Use 'gemini', 'claude', or 'openai'")
+        raise ValueError("Invalid model name. Use 'gemini', 'claude', or 'local'")
 
     splitter = SemanticSplitterNodeParser(
         buffer_size=1, 
@@ -341,8 +374,11 @@ def index_data(sample_data, llm_model):
     Settings.embed_model = my_embed_model
 
      # Check if input is URL
-    if sample_data.startswith(('http://', 'https://')):
-        None
+    if input_type == "url":
+        # Check if URL is valid
+        if not sample_data.startswith("http://") or sample_data.startswith("https://"):
+            logger.error("Invalid URL provided")
+            raise ValueError("Invalid URL provided")
         try:
             #documents = SimpleWebPageReader(html_to_text=True).load_data(urls=[sample_data])
             documents = scrape_website(sample_data)
@@ -353,46 +389,94 @@ def index_data(sample_data, llm_model):
                 logger.info(f"Documents loaded successfully from {sample_data}")
                 return documents
         except Exception as e:
-            import traceback
-            logger(f"\nError occurred: {str(e)}") 
+            logger.error(f"\nError occurred: {str(e)}")
+            return None 
     # Process local file or directory
-    elif os.path.exists(sample_data):
+    elif input_type == "file" or type == "directory":
         if os.path.isfile(sample_data):
             reader = SimpleDirectoryReader(input_files=[sample_data])
             documents = reader.load_data()
+            if not documents:
+                logger.error("No documents found in the file")
+                raise ValueError("No documents found in the file")
+            else:
+                logger.info(f"Documents loaded successfully from {sample_data}")
+                #log the beginning of the document
+                logger.info(f"First document: {documents[0].text[:50]}...")
             return documents
         elif os.path.isdir(sample_data):
             reader = SimpleDirectoryReader(input_dir=sample_data)
             documents = reader.load_data()
-            return documents  
+            if not documents:
+                logger.error("No documents found in the directory")
+                raise ValueError("No documents found in the directory")
+            else:   
+                logger.info(f"Documents loaded successfully from {sample_data}")
+                #log the beginning of the document
+                logger.info(f"First document: {documents[0].text[:50]}...")
+                return documents  
+    elif input_type == "csv":
+        # Parse CSV file
+        df = pd.read_csv(sample_data)
+        documents = []
+        for index, row in df.iterrows():
+            question = str(row['Questions'])
+            answer = str(row['Answers'])
+            # Create a structured text format
+            doc_text = f"Question: {question}\nAnswer: {answer}"
+            # Add metadata for potential filtering or reference
+            metadata = {"faq_question": question, "source_row": index}
+            documents.append(Document(text=doc_text, metadata=metadata))
+        logger.info(f"Parsed {len(documents)} documents from CSV file {sample_data}")       
+        if not documents:
+            logger.error("No documents found in the CSV file")
+            raise ValueError("No documents found in the CSV file")
+        else:
+            logger.info(f"Documents loaded successfully from {sample_data}")
+            logger.info(f"First document: {documents[0].text[:50]}...")
+            return documents
     else:
+        logger
         raise ValueError("Invalid input. Please provide a url or a valid file or a valid directory path")
+        return None
+    
 
-    return documents
-
-def store_documents(my_table_name, my_documents):
+def store_documents(my_table_name, my_documents, my_model):
     """
     Store documents in the specified table.
     
     Args:
         my_table_name (str): Name of the table to store documents
         my_documents (list): List of documents to store
+        my_model (str): Name of the LLM model to use ("gemini", "claude", "local")
     
     Returns:
         bool: True if documents are stored successfully, False otherwise
     """
-    EMBED_DIMENSION = 768
     
-    api_key = read_config('AI KEYS', 'gemini')
-    if not api_key:
-        raise ValueError("Gemini keys not found in environment variables")
-    os.environ["GOOGLE_API_KEY"] = api_key
-    llm = GoogleGenAI(model="models/gemini-2.0-flash-lite")
-    
-    my_embed_model = GoogleGenAIEmbedding(
+    if my_model.lower() == "gemini":
+        api_key = read_config('AI KEYS', 'gemini')
+        if not api_key:
+            raise ValueError("Gemini keys not found in environment variables")
+        os.environ["GOOGLE_API_KEY"] = api_key
+        llm = GoogleGenAI(model="models/gemini-2.0-flash-lite")
+        my_embed_model = GoogleGenAIEmbedding(
                 model="models/text-embedding-004",
-                dimensions=EMBED_DIMENSION,
+                dimensions=MY_EMBED_DIMENSION,
+                embed_batch_size=MY_EMBED_DIMENSION
             )
+    elif my_model.lower() == "local":
+        llm = Ollama(model="phi3:latest")
+        my_embed_model = OllamaEmbedding(
+            model_name="mxbai-embed-large:latest",
+            embed_batch_size=MY_EMBED_DIMENSION)
+    else:
+        raise ValueError("Invalid model name. Use 'gemini', 'claude', or 'local'")      
+    
+    #TODO 
+    # What should the system do if my_table_name already exists?
+    
+   
             
     Settings.embed_model = my_embed_model
     Settings.llm = llm
@@ -412,12 +496,23 @@ def store_documents(my_table_name, my_documents):
             port=url.port,
             user=url.username,
             table_name=my_table_name,
-            embed_dim=768,
+            embed_dim=MY_EMBED_DIMENSION,
         )
+        
+        if not my_vector_store:
+            logger.error("Failed to create vector store")
+            raise ValueError("Failed to create vector store")
+        logger.info(f"Vector store created successfully: {my_vector_store.table_name}")
         # Store documents
         my_storage_context = StorageContext.from_defaults(
             vector_store=my_vector_store,
-        ) 
+        )
+        if not my_storage_context:
+            logger.error("Failed to create storage context")
+            raise ValueError("Failed to create storage context")
+        else:
+            logger.info(f"Storing documents in table: {my_vector_store.table_name}")
+         
         my_index = VectorStoreIndex.from_documents(
             documents=my_documents,
             storage_context=my_storage_context, 
@@ -427,6 +522,7 @@ def store_documents(my_table_name, my_documents):
             logger.error("Failed to create index from documents")
             raise ValueError("Failed to create index from documents")
         else:
+            logger.info(f"Index created successfully: {my_index.summary}")
             return my_index        
     except Exception as e:
         logger.error(f"Error storing documents: {str(e)}")
@@ -434,13 +530,13 @@ def store_documents(my_table_name, my_documents):
 
 def test_RAG(table):
     # Get RAG service for table and model "gemini"
-    rag_service = RAGServiceManager.get_instance(table, "gemini")
+    rag_service = RAGServiceManager.get_instance(table, "local")
     
     # List of questions to ask
     questions = [
-        "Can you assist with accommodation for our guests?", 
-        "What is the maximum number of guests you can accommodate?",
-        "Can guests stay in other hotels?",
+        "Can you help with legal requirements for getting married in Cyprus?", 
+        "Can you recommend vendors for photography, catering, flowers, and entertainment?",
+        "What is the average cost of a wedding in Cyprus?",
         #"what is the capital of France?", OK
     ]
     
@@ -455,8 +551,15 @@ def main():
 
 if __name__ == "__main__":
     main()
-    table = "vasilias_weddings290325"
-    #my_documents = index_data("VW_dataMar25.txt", "gemini")
+    my_table = "vasilias_weddings19Apr25"
+    # my_documents1 = index_data("./data/VW_dataMar25.txt", "file",  "local")
+    # store_documents(my_table, my_documents1, "local")
+    # my_documents2 = index_data("./data/VWFAQ2.csv", "csv", "local")
+    # store_documents(my_table, my_documents2, "local")
+    #test_RAG(my_table)
+    
+    
+    
     # vasilias_nikoklis_doc = index_data("https://vasilias.nikoklis.com/", "gemini")
     # cyprus_wedding_doc = index_data("https://vasilias.nikoklis.com/cyprus-wedding-venue/", "gemini")
     # my_documents = vasilias_nikoklis_doc + cyprus_wedding_doc
@@ -479,6 +582,6 @@ if __name__ == "__main__":
     #my_documents = index_data("https://vasilias.nikoklis.com", "gemini")
    #store_documents(table, my_documents)
     # Test the RAG service
-    test_RAG(table)
+    
      
         
