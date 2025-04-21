@@ -3,11 +3,11 @@ import os
 
 def setup_logger(level=logging.INFO):
     # Create logs directory if it doesn't exist
-    log_dir = '/var/log/my_chatbot'
-    log_file = os.path.join(log_dir, 'my_library.log')
-    
+    #log_dir = '/var/log/my_chatbot'
+    #log_file = os.path.join(log_dir, 'my_library.log')
+    log_file = 'my_library.log'
     # Ensure the directory exists
-    os.makedirs(log_dir, exist_ok=True)
+    #os.makedirs(log_dir, exist_ok=True)
     
     logger = logging.getLogger(__name__)
     logger.setLevel(level)
