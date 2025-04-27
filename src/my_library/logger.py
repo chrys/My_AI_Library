@@ -20,7 +20,7 @@ def setup_logger(level=logging.INFO):
         import tempfile
         temp_dir = tempfile.gettempdir()
         log_file = os.path.join(temp_dir, 'my_library.log')
-        handler = logging.FileHandler(log_file)
+        handler = logging.FileHandler('my_library.log')
     
     handler.setLevel(level)
 

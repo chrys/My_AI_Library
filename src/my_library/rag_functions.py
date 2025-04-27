@@ -1,5 +1,6 @@
 import os
 import threading
+import datetime
 from sqlalchemy import make_url
 import pandas as pd
 from my_library.utilities import read_config
@@ -36,6 +37,9 @@ from llama_index.llms.ollama import Ollama
 from llama_index.embeddings.ollama import OllamaEmbedding
 
 MY_EMBED_DIMENSION = 1024
+GEMINI_EMBED_DIMENSION = 768 # it seems that the gemini embedding model is 768 dimensions
+
+
   # Singleton instance store with thread-safety
 class RAGServiceManager:
     _instances = {}
@@ -414,7 +418,10 @@ def index_data(sample_data, input_type, llm_model):
                 logger.info(f"Documents loaded successfully from {sample_data}")
                 #log the beginning of the document
                 logger.info(f"First document: {documents[0].text[:50]}...")
-                return documents  
+                return documents
+        else:
+                logger.error("File or directory not found")
+                raise FileNotFoundError(f"File or directory not found: {sample_data}")  
     elif input_type == "csv":
         # Parse CSV file
         df = pd.read_csv(sample_data)
@@ -462,8 +469,8 @@ def store_documents(my_table_name, my_documents, my_model):
         llm = GoogleGenAI(model="models/gemini-2.0-flash-lite")
         my_embed_model = GoogleGenAIEmbedding(
                 model="models/text-embedding-004",
-                dimensions=MY_EMBED_DIMENSION,
-                embed_batch_size=MY_EMBED_DIMENSION
+                dimensions=GEMINI_EMBED_DIMENSION,
+                embed_batch_size=GEMINI_EMBED_DIMENSION
             )
     elif my_model.lower() == "local":
         llm = Ollama(model="phi3:latest")
@@ -483,22 +490,38 @@ def store_documents(my_table_name, my_documents, my_model):
             
     try:
         # Get connection string
-        my_connection_string = read_config('CONNECTIONS', 'postgres')
+        my_connection_string = read_config('CONNECTIONS', 'postgres2')
         if not my_connection_string:
             logger.error("PostgreSQL connection string not found")
             raise ValueError("PostgreSQL connection string not found")
         # Initialize vector store
         url = make_url(my_connection_string)
-        my_vector_store = PGVectorStore.from_params(
-            database=url.database,
-            host=url.host,
-            password=url.password,
-            port=url.port,
-            user=url.username,
-            table_name=my_table_name,
-            embed_dim=MY_EMBED_DIMENSION,
-        )
-        
+        logger.info(f"Connecting to PostgreSQL database: {url.database} at {url.host}:{url.port} as user {url.username}")
+        logger.info(f"Using table name: {my_table_name}")
+        if my_model.lower() == "gemini":
+            my_vector_store = PGVectorStore.from_params(
+                database=url.database,
+                host=url.host,
+                password=url.password,
+                port=url.port,
+                user=url.username,
+                table_name=my_table_name,
+                embed_dim=GEMINI_EMBED_DIMENSION,
+            )
+        elif my_model.lower() == "local":
+            my_vector_store = PGVectorStore.from_params(
+                database=url.database,
+                host=url.host,
+                password=url.password,
+                port=url.port,
+                user=url.username,
+                table_name=my_table_name,
+                embed_dim=MY_EMBED_DIMENSION,
+            )
+        else:
+            logger.error("Invalid model name. Use 'gemini' or 'local'")
+            raise ValueError("Invalid model name. Use 'gemini' or 'local'")
+       
         if not my_vector_store:
             logger.error("Failed to create vector store")
             raise ValueError("Failed to create vector store")
@@ -516,7 +539,6 @@ def store_documents(my_table_name, my_documents, my_model):
         my_index = VectorStoreIndex.from_documents(
             documents=my_documents,
             storage_context=my_storage_context, 
-            show_progress=True,
         )
         if not my_index:
             logger.error("Failed to create index from documents")
@@ -545,18 +567,50 @@ def test_RAG(table):
         response = rag_service.ask(question)
         print(f"Question: {question}")
         print(f"Reply: {response}\n")
-            
+
+def test_embedding():
+    # Test the embedding model
+    my_embed_model = OllamaEmbedding(
+        model_name="mxbai-embed-large:latest",
+        embed_batch_size=MY_EMBED_DIMENSION)
+    Settings.embed_model = my_embed_model
+    logger.info("Local embedding model initialized successfully")
+    
+    # Test the embedding model with a sample text
+    sample_text = "This is a test sentence for embedding."
+    embedding = my_embed_model.get_text_embedding(sample_text)
+    logger.info(f"Embedding length: {len(embedding)}")
+    
+    GOOGLE_API_KEY = read_config('AI KEYS', 'gemini')
+    if not GOOGLE_API_KEY:
+        logger.error("Gemini keys not found in environment variables")
+        raise ValueError("Gemini keys not found in environment variables")
+    os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
+    
+    my_embed_model2 = GoogleGenAIEmbedding(
+        model="models/text-embedding-004",
+        output_dimensionality=GEMINI_EMBED_DIMENSION,
+    )
+    Settings.embed_model = my_embed_model2
+    logger.info("Google GenAI embedding model initialized successfully")
+    # Test the embedding model with a sample text
+    sample_text2 = "This is a test sentence for embedding."
+    embedding2 = my_embed_model2.get_text_embedding(sample_text2)
+    logger.info(f"Embedding length: {len(embedding2)}")
+                
 def main(): 
     return None 
 
 if __name__ == "__main__":
     main()
-    my_table = "vasilias_weddings19Apr25"
-    # my_documents1 = index_data("./data/VW_dataMar25.txt", "file",  "local")
-    # store_documents(my_table, my_documents1, "local")
-    # my_documents2 = index_data("./data/VWFAQ2.csv", "csv", "local")
-    # store_documents(my_table, my_documents2, "local")
-    #test_RAG(my_table)
+    
+    test_embedding()
+    today_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    my_table = "vasilias_weddings_" + today_date
+    my_documents1 = index_data("./data/VW_dataMar25.txt", "file",  "local")
+    store_documents(my_table, my_documents1, "local")
+    my_documents2 = index_data("./data/VWFAQ2.csv", "csv", "local")
+    store_documents(my_table, my_documents2, "local")
     
     
     
