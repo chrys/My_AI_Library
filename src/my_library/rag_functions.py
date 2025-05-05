@@ -7,6 +7,7 @@ from my_library.utilities import read_config
 from my_library.logger import setup_logger
 from my_library.wp_scraper import scrape_website
 
+
 # Initialize the logger
 logger = setup_logger()
 
@@ -80,11 +81,16 @@ class RAGService:
         self.logger.info(f"Initializing RAG components for {self.model_name}...")
         try:
             # Get connection string
-            my_connection_string = read_config('CONNECTIONS', 'postgres')
+            my_connection_string = read_config('CONNECTIONS', 'postgres2')
             if not my_connection_string:
                 self.logger.error("PostgreSQL connection string not found")
                 return False
-
+            # Get table name
+            self.table_name = read_config('RAG', 'table_name')
+            if not self.table_name:
+                self.logger.error("Table name not found in environment variables")
+                return False
+             
             # Initialize LLM based on model selection
             self._initialize_llm()
 
@@ -110,7 +116,19 @@ class RAGService:
             # Settings.llm = self.llm
             
             # Initialize vector store
+            
+            
             url = make_url(my_connection_string)
+            if self.model_name.lower() == "gemini":
+                embed_dim = GEMINI_EMBED_DIMENSION
+                self.logger.info(f"Gemini embedding dimension: {embed_dim}")
+            elif self.model_name.lower() == "local":
+                embed_dim = MY_EMBED_DIMENSION
+                self.logger.info(f"Local embedding dimension: {embed_dim}")
+            else:
+                self.logger.error("Invalid model name. Use 'gemini' or 'local'")
+                return False
+            
             self.vector_store = PGVectorStore.from_params(
                 database=url.database,
                 host=url.host,
@@ -118,7 +136,7 @@ class RAGService:
                 port=url.port,
                 user=url.username,
                 table_name=self.table_name,
-                embed_dim=MY_EMBED_DIMENSION,
+                embed_dim=embed_dim,
             )
 
             # Create index and retriever
@@ -127,12 +145,21 @@ class RAGService:
                 self.logger.error("Failed to create index from vector store")
                 return False
 
-            self.retriever = self.index.as_retriever(similarity_top_k=3) #let's start with 3 top chunks
+            self.retriever = self.index.as_retriever(
+                similarity_top_k=3,
+                search_kwargs={
+                    "k": 3,
+                    "score_threshold": None,  # Remove any threshold initially
+                    "fetch_k": 10  # Fetch more candidates
+                },
+            )
+            
             if not self.retriever:
                 self.logger.error("Failed to create retriever")
                 return False
             
             # Initialize ChatEngine
+            
             self.chat_engine = self.index.as_chat_engine(
                 chat_mode="context",
                 verbose=True,
@@ -175,6 +202,9 @@ class RAGService:
                 raise ValueError("Gemini keys not found in environment variables")
             os.environ["GOOGLE_API_KEY"] = api_key
             self.llm = GoogleGenAI(model="models/gemini-2.0-flash-lite")
+            self.embed_model = GoogleGenAIEmbedding(
+            model="models/text-embedding-004",
+            )
         elif self.model_name.lower() == "local":
             self.llm = Ollama(model="phi3:latest")
             self.embed_model = OllamaEmbedding(
@@ -184,10 +214,20 @@ class RAGService:
         else:
             raise ValueError("Invalid model name. Use 'openai', 'claude', or 'gemini'")
 
-        Settings.llm = self.llm
-        Settings.embed_model = self.embed_model
-        self.logger.info(f"LLM ({self.model_name}) initialized successfully")
-
+        if not self.llm:
+            self.logger.error("Failed to initialize LLM")
+            raise ValueError("Failed to initialize LLM")
+        else: 
+            self.logger.info(f"{self.model_name} LLM initialized successfully")
+            Settings.llm = self.llm
+        
+        if not self.embed_model:
+            self.logger.error("Failed to initialize embedding model")
+            raise ValueError("Failed to initialize embedding model")
+        else:
+            self.logger.info(f"{self.model_name} embedding model initialized successfully")
+            Settings.embed_model = self.embed_model
+        
     def ask(self, message):
         """Thread-safe method to ask questions of the RAG system"""
         if not self.initialized and not self.initialize():
@@ -226,9 +266,17 @@ class RAGService:
                 # self.local.prompt = PromptTemplate(template)
 
             # Retrieve documents
+            logger.info(f"Using retriever with similarity_top_k={self.retriever.similarity_top_k}")
+            
             retrieved_nodes = self.retriever.retrieve(message)
-
-            if not retrieved_nodes:
+            logger.info(f"Retrieved {len(retrieved_nodes)} nodes")
+            # Log the first retrieved node if any
+            if retrieved_nodes:
+                
+                logger.info(f"First retrieved node text: {retrieved_nodes[0].node.text[:100]}...")
+                logger.info(f"First retrieved node score: {retrieved_nodes[0].score}")
+            else:
+                logger.warning("No nodes retrieved!")
                 return "I couldn't find any relevant information to answer your question."
 
             # # Format context from retrieved nodes
@@ -254,6 +302,56 @@ class RAGService:
             self.logger.error(f"Error processing question: {str(e)}")
             return "I'm sorry, but an error occurred while processing your question."
 
+    def test_retrieval(self):
+        """Add this method to RAGService class"""
+        # Get a sample embedding
+        try:
+            sample_text = "Test query"
+            embedding = Settings.embed_model.get_text_embedding(sample_text)
+            logger.info(f"Query embedding dimension: {len(embedding)}")
+            
+            # Get table dimension using vec_dim() function
+            url = make_url(read_config('CONNECTIONS', 'postgres2'))
+            import psycopg2
+            with psycopg2.connect(
+                dbname=url.database,
+                user=url.username,
+                password=url.password,
+                host=url.host,
+                port=url.port
+            ) as conn:
+                with conn.cursor() as cur:
+                    quoted_table = f'"{self.table_name}"'
+                    # Also check if we have any vectors stored
+                    cur.execute(f"SELECT COUNT(*) FROM {quoted_table}")
+                    count = cur.fetchone()[0]
+                    logger.info(f"Number of vectors stored: {count}")
+                    
+                    # Check total rows
+                    cur.execute(f"SELECT COUNT(*) FROM {quoted_table}")
+                    count = cur.fetchone()[0]
+                    logger.info(f"Number of vectors stored: {count}")
+                    
+                    # Sample some actual data
+                    cur.execute(f"SELECT id, text FROM {quoted_table} LIMIT 1")
+                    sample = cur.fetchone()
+                    if sample:
+                        logger.info(f"Sample document ID: {sample[0]}")
+                        logger.info(f"Sample text: {sample[1][:100]}...")
+                        
+            # 3. Test actual retrieval
+            if self.retriever:
+                logger.info("Testing retriever with sample query...")
+                nodes = self.retriever.retrieve("wedding venue")
+                logger.info(f"Retrieved {len(nodes)} nodes for test query")
+                if nodes:
+                    logger.info(f"First retrieved node score: {nodes[0].score}")
+                    logger.info(f"First retrieved text: {nodes[0].node.text[:100]}...")
+            else:
+                logger.error("Retriever not initialized")
+        except Exception as e:
+            logger.error(f"Error in test_retrieval: {str(e)}")
+            
     def cleanup(self):
         """Clean up resources"""
         # Implementation depends on what resources need cleanup
@@ -358,7 +456,6 @@ def index_data(sample_data, input_type, llm_model):
     elif llm_model.lower() == "gemini":
         my_embed_model = GoogleGenAIEmbedding(
             model="models/text-embedding-004",
-            dimensions=MY_EMBED_DIMENSION
         )
     elif llm_model.lower() == "local":
         my_embed_model = OllamaEmbedding(
@@ -469,8 +566,7 @@ def store_documents(my_table_name, my_documents, my_model):
         llm = GoogleGenAI(model="models/gemini-2.0-flash-lite")
         my_embed_model = GoogleGenAIEmbedding(
                 model="models/text-embedding-004",
-                dimensions=GEMINI_EMBED_DIMENSION,
-                embed_batch_size=GEMINI_EMBED_DIMENSION
+                embed_batch_size=32,
             )
     elif my_model.lower() == "local":
         llm = Ollama(model="phi3:latest")
@@ -539,6 +635,7 @@ def store_documents(my_table_name, my_documents, my_model):
         my_index = VectorStoreIndex.from_documents(
             documents=my_documents,
             storage_context=my_storage_context, 
+            show_progress=True,
         )
         if not my_index:
             logger.error("Failed to create index from documents")
@@ -553,6 +650,8 @@ def store_documents(my_table_name, my_documents, my_model):
 def test_RAG(table):
     # Get RAG service for table and model "gemini"
     rag_service = RAGServiceManager.get_instance(table, "local")
+    logger.info(f"Testing RAG service for table: {table}")
+    rag_service.test_retrieval()
     
     # List of questions to ask
     questions = [
@@ -603,15 +702,12 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
-    test_embedding()
-    today_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    today_date = datetime.datetime.now().strftime("%Y_%m_%d")
     my_table = "vasilias_weddings_" + today_date
-    my_documents1 = index_data("./data/VW_dataMar25.txt", "file",  "local")
-    store_documents(my_table, my_documents1, "local")
-    my_documents2 = index_data("./data/VWFAQ2.csv", "csv", "local")
-    store_documents(my_table, my_documents2, "local")
-    
+    my_documents1 = index_data("./data/VW_dataMar25.txt", "file",  "gemini")
+    store_documents(my_table, my_documents1, "gemini")
+    my_documents2 = index_data("./data/VWFAQ2.csv", "csv", "gemini")
+    store_documents(my_table, my_documents2, "gemini")
     
     
     # vasilias_nikoklis_doc = index_data("https://vasilias.nikoklis.com/", "gemini")

@@ -119,7 +119,7 @@ def evaluate_ragas(list_of_questions: List[Dict[str, str]], table_name: str, mod
 
     # Write results to CSV
     today_str = datetime.datetime.now().strftime("%Y-%m-%d")
-    results_filename = f".data/results_ragas_{today_str}.csv"
+    results_filename = f"./data/results_ragas_{today_str}.csv"
     with open(results_filename, "w", newline='', encoding="utf-8") as csvfile:
         fieldnames = [
             "id", "question", "expected answer", "generated answer",
@@ -202,6 +202,7 @@ def evaluate_mlflow(list_of_questions: List[Dict[str, str]], table_name: str, mo
 
 # Example usage:
 if __name__ == "__main__":
-    my_table = "vasilias_weddings19Apr25"
+    today_date = datetime.datetime.now().strftime("%Y_%m_%d")
+    my_table = "vasilias_weddings_" + today_date
     qa_list = parse_qa_csv("./data/VWFAQ4 5 rows.csv")
     evaluate_ragas(qa_list, my_table, "local")
