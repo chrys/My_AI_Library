@@ -36,20 +36,24 @@ import os
 
 #     return logger
 
-def setup_logger(level=logging.INFO):
-    logger = logging.getLogger('my_library')
-    logger.setLevel(level)
-    # Avoid adding multiple handlers if already set
-    if not logger.handlers:
-        log_file = 'django2.log'  # Set your desired log file path
-        handler = logging.FileHandler(log_file)
-        handler.setLevel(level)
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-    return logger
+# def setup_logger():
+#     logger = logging.getLogger('my_library')
+#     logger.setLevel(level)
+#     # Avoid adding multiple handlers if already set
+#     if not logger.handlers:
+#         log_file = 'django2.log'  # Set your desired log file path
+#         handler = logging.FileHandler(log_file)
+#         handler.setLevel(level)
+#         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+#         handler.setFormatter(formatter)
+#         logger.addHandler(handler)
+#     return logger
 
-def set_logging_level(logger, level):
-    logger.setLevel(level)
-    for handler in logger.handlers:
-        handler.setLevel(level)
+# def set_logging_level(logger, level):
+#     logger.setLevel(level)
+#     for handler in logger.handlers:
+#         handler.setLevel(level)
+
+def setup_logger():
+    return logging.getLogger('my_library')
+   
