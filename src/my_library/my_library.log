@@ -1,24 +1,53 @@
-2025-03-16 08:04:45,946 - INFO - Gemini LLM initialized successfully
-2025-03-16 08:07:19,438 - INFO - Gemini LLM initialized successfully
-2025-03-16 08:07:44,872 - INFO - Initializing RAG components for gemini...
-2025-03-16 08:07:44,872 - INFO - Initializing RAG components for gemini...
-2025-03-16 08:07:44,959 - INFO - LLM (gemini) initialized successfully
-2025-03-16 08:07:44,959 - INFO - LLM (gemini) initialized successfully
-2025-03-16 08:07:44,966 - INFO - New question received
-2025-03-16 08:07:44,966 - INFO - New question received
-2025-03-16 08:07:51,330 - INFO - New question received
-2025-03-16 08:07:51,330 - INFO - New question received
-2025-03-16 08:07:52,762 - INFO - New question received
-2025-03-16 08:07:52,762 - INFO - New question received
-2025-03-16 08:09:40,391 - INFO - Initializing RAG components for gemini...
-2025-03-16 08:09:40,391 - INFO - Initializing RAG components for gemini...
-2025-03-16 08:09:40,478 - INFO - LLM (gemini) initialized successfully
-2025-03-16 08:09:40,478 - INFO - LLM (gemini) initialized successfully
-2025-03-16 08:09:40,540 - INFO - New question received
-2025-03-16 08:09:40,540 - INFO - New question received
-2025-03-16 08:09:45,759 - INFO - New question received
-2025-03-16 08:09:45,759 - INFO - New question received
-2025-03-16 08:09:47,554 - INFO - New question received
-2025-03-16 08:09:47,554 - INFO - New question received
-2025-03-16 08:09:51,137 - INFO - New question received
-2025-03-16 08:09:51,137 - INFO - New question received
+2025-05-10 18:03:37,042 - INFO - Logger has been set up successfully.
+2025-05-10 18:03:37,043 - WARNING - This is a warning message.
+2025-05-10 18:03:37,043 - ERROR - This is an error message.
+2025-05-10 18:03:37,043 - CRITICAL - This is a critical message.
+2025-05-10 18:11:40,337 - INFO - PyTorch version 2.6.0 available.
+2025-05-10 18:11:40,338 - INFO - Polars version 1.27.1 available.
+2025-05-10 18:11:41,492 - INFO - Initializing RAG components for gemini...
+2025-05-10 18:11:41,583 - INFO - HTTP Request: GET https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite "HTTP/1.1 200 OK"
+2025-05-10 18:11:41,594 - INFO - gemini LLM initialized successfully
+2025-05-10 18:11:41,595 - INFO - gemini embedding model initialized successfully
+2025-05-10 18:11:41,769 - INFO - Gemini embedding dimension: 768
+2025-05-10 18:11:41,826 - INFO - Testing RAG service for table: data_vasilias_weddings_2025_05_05
+2025-05-10 18:11:42,105 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents "HTTP/1.1 200 OK"
+2025-05-10 18:11:42,108 - INFO - Query embedding dimension: 768
+2025-05-10 18:11:42,697 - ERROR - Error in test_retrieval: relation "vasilias_weddings_2025_05_05" does not exist
+LINE 1: SELECT COUNT(*) FROM "vasilias_weddings_2025_05_05"
+                             ^
+
+2025-05-10 18:11:42,698 - INFO - New question received
+2025-05-10 18:11:42,698 - INFO - Using retriever with similarity_top_k=3
+2025-05-10 18:11:42,938 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents "HTTP/1.1 200 OK"
+2025-05-10 18:11:44,233 - INFO - Retrieved 3 nodes
+2025-05-10 18:11:44,233 - INFO - First retrieved node text: Question: Can you help with legal requirements for getting married in Cyprus?
+Answer: Absolutely! ...
+2025-05-10 18:11:44,233 - INFO - First retrieved node score: 0.9689950314666403
+2025-05-10 18:11:44,536 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents "HTTP/1.1 200 OK"
+2025-05-10 18:11:44,688 - INFO - AFC is enabled with max remote calls: 10.
+2025-05-10 18:11:45,251 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent "HTTP/1.1 200 OK"
+2025-05-10 18:11:45,252 - INFO - AFC remote call 1 is done.
+2025-05-10 18:11:45,253 - INFO - Response generated successfully
+2025-05-10 18:11:45,253 - INFO - New question received
+2025-05-10 18:11:45,253 - INFO - Using retriever with similarity_top_k=3
+2025-05-10 18:11:45,560 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents "HTTP/1.1 200 OK"
+2025-05-10 18:11:45,704 - INFO - Retrieved 3 nodes
+2025-05-10 18:11:45,704 - INFO - First retrieved node text: We can tailor options to your budget and style....
+2025-05-10 18:11:45,704 - INFO - First retrieved node score: 0.9655036103932
+2025-05-10 18:11:45,969 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents "HTTP/1.1 200 OK"
+2025-05-10 18:11:46,120 - INFO - AFC is enabled with max remote calls: 10.
+2025-05-10 18:11:46,685 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent "HTTP/1.1 200 OK"
+2025-05-10 18:11:46,687 - INFO - AFC remote call 1 is done.
+2025-05-10 18:11:46,688 - INFO - Response generated successfully
+2025-05-10 18:11:46,689 - INFO - New question received
+2025-05-10 18:11:46,689 - INFO - Using retriever with similarity_top_k=3
+2025-05-10 18:11:46,994 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents "HTTP/1.1 200 OK"
+2025-05-10 18:11:47,140 - INFO - Retrieved 3 nodes
+2025-05-10 18:11:47,140 - INFO - First retrieved node text: Question: What is the average cost of a wedding in Cyprus?
+Answer: Costs can vary depending on the n...
+2025-05-10 18:11:47,140 - INFO - First retrieved node score: 0.9623539231151037
+2025-05-10 18:11:47,403 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents "HTTP/1.1 200 OK"
+2025-05-10 18:11:47,553 - INFO - AFC is enabled with max remote calls: 10.
+2025-05-10 18:11:48,119 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent "HTTP/1.1 200 OK"
+2025-05-10 18:11:48,121 - INFO - AFC remote call 1 is done.
+2025-05-10 18:11:48,122 - INFO - Response generated successfully

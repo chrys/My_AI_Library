@@ -55,5 +55,22 @@ import os
 #         handler.setLevel(level)
 
 def setup_logger():
-    return logging.getLogger('my_library')
-   
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler('my_library.log'),
+            logging.StreamHandler()
+        ]
+    )
+    logger = logging.getLogger('my_library')
+    
+    return logger 
+
+if __name__ == "__main__":
+    logger = setup_logger()
+    logger.info("Logger has been set up successfully.")
+    logger.debug("This is a debug message.")
+    logger.warning("This is a warning message.")
+    logger.error("This is an error message.")
+    logger.critical("This is a critical message.")

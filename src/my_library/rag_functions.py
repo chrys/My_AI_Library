@@ -11,6 +11,7 @@ from my_library.wp_scraper import scrape_website
 # Initialize the logger
 logger = setup_logger()
 
+
 from llama_index.llms.openai import OpenAI
 from llama_index.core import (
       VectorStoreIndex,
@@ -647,9 +648,21 @@ def store_documents(my_table_name, my_documents, my_model):
         logger.error(f"Error storing documents: {str(e)}")
         return False
 
-def test_RAG(table):
+def test_RAG(table, model):
     # Get RAG service for table and model "gemini"
-    rag_service = RAGServiceManager.get_instance(table, "local")
+    if model.lower() == "gemini":
+        GOOGLE_API_KEY = read_config('AI KEYS', 'gemini')
+        if not GOOGLE_API_KEY:
+            logger.error("Gemini keys not found in environment variables")
+            raise ValueError("Gemini keys not found in environment variables")
+        os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
+        rag_service = RAGServiceManager.get_instance(table, "gemini")
+    elif model.lower() == "local":
+        rag_service = RAGServiceManager.get_instance(table, "local")
+    else:
+        logger.error("Invalid model name. Use 'gemini' or 'local'")
+        raise ValueError("Invalid model name. Use 'gemini' or 'local'")
+    
     logger.info(f"Testing RAG service for table: {table}")
     rag_service.test_retrieval()
     
@@ -702,12 +715,13 @@ def main():
 
 if __name__ == "__main__":
     main()
-    today_date = datetime.datetime.now().strftime("%Y_%m_%d")
-    my_table = "vasilias_weddings_" + today_date
-    my_documents1 = index_data("./data/VW_dataMar25.txt", "file",  "gemini")
-    store_documents(my_table, my_documents1, "gemini")
-    my_documents2 = index_data("./data/VWFAQ2.csv", "csv", "gemini")
-    store_documents(my_table, my_documents2, "gemini")
+    test_RAG("data_vasilias_weddings_2025_05_05", "gemini")
+    # today_date = datetime.datetime.now().strftime("%Y_%m_%d")
+    # my_table = "vasilias_weddings_" + today_date
+    # my_documents1 = index_data("./data/VW_dataMar25.txt", "file",  "gemini")
+    # store_documents(my_table, my_documents1, "gemini")
+    # my_documents2 = index_data("./data/VWFAQ2.csv", "csv", "gemini")
+    # store_documents(my_table, my_documents2, "gemini")
     
     
     # vasilias_nikoklis_doc = index_data("https://vasilias.nikoklis.com/", "gemini")
