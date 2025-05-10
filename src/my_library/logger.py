@@ -41,7 +41,7 @@ def setup_logger(level=logging.INFO):
     logger.setLevel(level)
     # Avoid adding multiple handlers if already set
     if not logger.handlers:
-        log_file = 'django.log'  # Set your desired log file path
+        log_file = 'django2.log'  # Set your desired log file path
         handler = logging.FileHandler(log_file)
         handler.setLevel(level)
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
