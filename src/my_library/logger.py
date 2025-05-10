@@ -39,8 +39,14 @@ import os
 def setup_logger(level=logging.INFO):
     logger = logging.getLogger('my_library')
     logger.setLevel(level)
-    # Do NOT add handlers or formatters here!
-    # Let Django's LOGGING config handle handlers and formatting.
+    # Avoid adding multiple handlers if already set
+    if not logger.handlers:
+        log_file = 'django.log'  # Set your desired log file path
+        handler = logging.FileHandler(log_file)
+        handler.setLevel(level)
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
     return logger
 
 def set_logging_level(logger, level):
