@@ -57,15 +57,30 @@ def read_config(section: str, key: str) -> str:
     # Get the project root directory
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     env_path = os.path.join(project_root, '.env')
+    dotenv_loaded = load_dotenv(env_path)
+    value_loaded = os.getenv(key)
     
-    # Load the .env file from project root
-    if not load_dotenv(dotenv_path=env_path):
-        raise FileNotFoundError(f".env file not found at {env_path}")
-    value = os.getenv(key)
-    if value is None:
-        raise KeyError(f"Key not found in .env file: {key}")
-    return value
+    if value_loaded is None:
+        error_msg = f"Configuration key '{key}' not found in environment variables. "
+        if os.path.exists(project_root): # Check if .env file exists, even if not loaded or key not in it
+            if dotenv_loaded:
+                error_msg += f"A .env file was loaded from '{project_root}', but the key was not present there or was empty."
+            else:
+                # This case might occur if .env exists but is unreadable, though unlikely with load_dotenv's default.
+                error_msg += f"A .env file exists at '{project_root}', but the key was not found (or file was not loaded for other reasons)."
+        else:
+            error_msg += f"No .env file was found at '{project_root}' to load development/local variables from."
+        raise KeyError(error_msg)
+    return value_loaded
 
+#main to test read_config
 if __name__ == "__main__":
-    openai_key = read_config("AI KEYS", "openai")
-    print(openai_key)
+    try:
+        # Test with a known section and key
+        section = 'DEFAULT'
+        key = 'postgres2'
+        value = read_config(section, key)
+        print(f"Value for {section}.{key}: {value}")
+    except Exception as e:
+        print(f"Error: {e}")
+    
