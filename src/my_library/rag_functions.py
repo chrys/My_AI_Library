@@ -38,6 +38,10 @@ from my_library.parse_csv import parse_qa_csv
 from llama_index.llms.ollama import Ollama
 from llama_index.embeddings.ollama import OllamaEmbedding
 
+import time
+from google.api_core.exceptions import ResourceExhausted
+
+
 MY_EMBED_DIMENSION = 1024
 GEMINI_EMBED_DIMENSION = 768 # it seems that the gemini embedding model is 768 dimensions
 
@@ -202,7 +206,7 @@ class RAGService:
             if not api_key:
                 raise ValueError("Gemini keys not found in environment variables")
             os.environ["GOOGLE_API_KEY"] = api_key
-            self.llm = GoogleGenAI(model="models/gemini-2.0-flash-lite")
+            self.llm = GoogleGenAI(model="models/gemini-2.5-flash-preview-05-20")
             self.embed_model = GoogleGenAIEmbedding(
             model="models/text-embedding-004",
             )
@@ -391,6 +395,18 @@ class RAGService:
 #           return JsonResponse({"response": response})
 
 #       return render(request, 'chatbot/chat.html')
+def embed_with_retry(text, embed_model, max_retries=5, delay=1):
+    for attempt in range(max_retries):
+        try:
+            return embed_model.get_text_embedding(text)
+        except ResourceExhausted as e:
+            if attempt == max_retries - 1:
+                raise e
+            time.sleep(delay * (attempt + 1))  # Exponential backoff
+        except Exception as e:
+            logger.error(f"Error during embedding: {e}")
+            return None
+    return None
 
 def index_data(sample_data, input_type, llm_model):
     """
@@ -436,7 +452,7 @@ def index_data(sample_data, input_type, llm_model):
             logger.error("Gemini keys not found in environment variables")
             raise ValueError("Gemini keys not found in environment variables")
         os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
-        my_llm = GoogleGenAI(model = "models/gemini-2.0-flash-lite")
+        my_llm = GoogleGenAI(model = "models/gemini-2.5-flash-preview-05-20")
         Settings.llm = my_llm
         logger.info("Gemini LLM initialized successfully")
     elif llm_model.lower() == "local":
@@ -564,7 +580,7 @@ def store_documents(my_table_name, my_documents, my_model):
         if not api_key:
             raise ValueError("Gemini keys not found in environment variables")
         os.environ["GOOGLE_API_KEY"] = api_key
-        llm = GoogleGenAI(model="models/gemini-2.0-flash-lite")
+        llm = GoogleGenAI(model="models/gemini-2.5-flash-preview-05-20")
         my_embed_model = GoogleGenAIEmbedding(
                 model="models/text-embedding-004",
                 embed_batch_size=32,
@@ -632,21 +648,48 @@ def store_documents(my_table_name, my_documents, my_model):
             raise ValueError("Failed to create storage context")
         else:
             logger.info(f"Storing documents in table: {my_vector_store.table_name}")
-         
-        my_index = VectorStoreIndex.from_documents(
-            documents=my_documents,
-            storage_context=my_storage_context, 
-            show_progress=True,
-        )
-        if not my_index:
-            logger.error("Failed to create index from documents")
-            raise ValueError("Failed to create index from documents")
+            
+        # Create embeddings with retry and add to vector store
+        nodes = []
+        for doc in my_documents:
+            embedding = embed_with_retry(doc.text, my_embed_model)
+            if embedding:
+                # Create a LlamaIndex Node object
+                node = Document(
+                    text=doc.text,
+                    embedding=embedding,
+                    metadata=doc.metadata,
+                    id_=doc.id_
+                )
+                nodes.append(node)
+            else:
+                logger.warning(f"Failed to embed document {doc.id_}")
+        
+        # Store embeddings in vector store
+        if nodes:
+            my_vector_store.add(nodes)
+            logger.info(f"Stored {len(nodes)} documents in table: {my_vector_store.table_name}")
         else:
-            logger.info(f"Index created successfully: {my_index.summary}")
-            return my_index        
+            logger.warning("No nodes to store in vector store.")
+        return True
     except Exception as e:
         logger.error(f"Error storing documents: {str(e)}")
         return False
+         
+    #     my_index = VectorStoreIndex.from_documents(
+    #         documents=my_documents,
+    #         storage_context=my_storage_context, 
+    #         show_progress=True,
+    #     )
+    #     if not my_index:
+    #         logger.error("Failed to create index from documents")
+    #         raise ValueError("Failed to create index from documents")
+    #     else:
+    #         logger.info(f"Index created successfully: {my_index.summary}")
+    #         return my_index        
+    # except Exception as e:
+    #     logger.error(f"Error storing documents: {str(e)}")
+    #     return False
 
 def test_RAG(table, model):
     # Get RAG service for table and model "gemini"
@@ -668,9 +711,9 @@ def test_RAG(table, model):
     
     # List of questions to ask
     questions = [
-        "Can you help with legal requirements for getting married in Cyprus?", 
-        "Can you recommend vendors for photography, catering, flowers, and entertainment?",
-        "What is the average cost of a wedding in Cyprus?",
+        "Do you have experience with weddings for couples of different nationalities or religions?", 
+        "Can you provide references or testimonials from past clients?",
+        "How many guests does a cocktail jar serve? and what are the options?",
         #"what is the capital of France?", OK
     ]
     
@@ -709,19 +752,22 @@ def test_embedding():
     sample_text2 = "This is a test sentence for embedding."
     embedding2 = my_embed_model2.get_text_embedding(sample_text2)
     logger.info(f"Embedding length: {len(embedding2)}")
+
+
+
                 
 def main(): 
     return None 
 
 if __name__ == "__main__":
     main()
-    test_RAG("data_vasilias_weddings_2025_05_05", "gemini")
-    # today_date = datetime.datetime.now().strftime("%Y_%m_%d")
-    # my_table = "vasilias_weddings_" + today_date
-    # my_documents1 = index_data("./data/VW_dataMar25.txt", "file",  "gemini")
-    # store_documents(my_table, my_documents1, "gemini")
-    # my_documents2 = index_data("./data/VWFAQ2.csv", "csv", "gemini")
-    # store_documents(my_table, my_documents2, "gemini")
+    test_RAG("vasilias_weddings_2025_05_24", "gemini")
+    #today_date = datetime.datetime.now().strftime("%Y_%m_%d")
+    #my_table = "vasilias_weddings_" + today_date
+    #my_documents1 = index_data("./data/VW_dataMar25.txt", "file",  "gemini")
+    #store_documents(my_table, my_documents1, "gemini")
+    #my_documents2 = index_data("./data/VWFAQ24052025.csv", "csv", "gemini")
+    #store_documents(my_table, my_documents2, "gemini")
     
     
     # vasilias_nikoklis_doc = index_data("https://vasilias.nikoklis.com/", "gemini")
