@@ -32,7 +32,7 @@ from llama_index.vector_stores.postgres import PGVectorStore
 from llama_index.llms.anthropic import Anthropic
 from llama_index.llms.google_genai import GoogleGenAI
 
-from llama_index.readers.web import SimpleWebPageReader
+#from llama_index.readers.web import SimpleWebPageReader
 
 from my_library.parse_csv import parse_qa_csv
 from llama_index.llms.ollama import Ollama
