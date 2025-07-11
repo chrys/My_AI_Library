@@ -1,6 +1,6 @@
 import configparser
 import os
-
+import dotenv
 # def read_config(section: str, key: str) -> str:
 #     """
 #     Read sensitive data from the configuration file.
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     try:
         # Test with a known section and key
         section = 'DEFAULT'
-        key = 'postgres2'
+        key = 'postgres3'
         value = read_config(section, key)
         print(f"Value for {section}.{key}: {value}")
     except Exception as e:

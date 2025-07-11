@@ -42,7 +42,10 @@ import time
 from google.api_core.exceptions import ResourceExhausted
 
 
-MY_EMBED_DIMENSION = 1024
+MY_EMBED_DIMENSION = 768
+
+# gemini-embedding-exp-03-07
+# it says that output dimension size can be 3072, 1536, or 768
 GEMINI_EMBED_DIMENSION = 768 # it seems that the gemini embedding model is 768 dimensions
 
 
@@ -206,9 +209,9 @@ class RAGService:
             if not api_key:
                 raise ValueError("Gemini keys not found in environment variables")
             os.environ["GOOGLE_API_KEY"] = api_key
-            self.llm = GoogleGenAI(model="models/gemini-2.5-flash-preview-05-20")
+            self.llm = GoogleGenAI(model="models/gemini-2.5-flash-lite-preview-06-17")
             self.embed_model = GoogleGenAIEmbedding(
-            model="models/text-embedding-004",
+            model="gemini-embedding-exp-03-07",
             )
         elif self.model_name.lower() == "local":
             self.llm = Ollama(model="phi3:latest")
@@ -408,7 +411,7 @@ def embed_with_retry(text, embed_model, max_retries=5, delay=1):
             return None
     return None
 
-def index_data(sample_data, input_type, llm_model):
+def index_data(sample_data, input_type, llm_model, my_embed_model):
     """
     Index data from various sources using specified LLM model.
     
@@ -425,8 +428,6 @@ def index_data(sample_data, input_type, llm_model):
         FileNotFoundError: If the specified file doesn't exist
     """
    # Initialize LLM and Embedding models
-    my_llm = None
-    my_embed_model = None
     
     if llm_model.lower() == "openai":
         OPENAI_API_KEY = read_config('AI KEYS', 'openai')
@@ -452,12 +453,11 @@ def index_data(sample_data, input_type, llm_model):
             logger.error("Gemini keys not found in environment variables")
             raise ValueError("Gemini keys not found in environment variables")
         os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
-        my_llm = GoogleGenAI(model = "models/gemini-2.5-flash-preview-05-20")
+        my_llm = GoogleGenAI(model = "/models/gemini-2.5-flash-lite-preview-06-17")
         Settings.llm = my_llm
         logger.info("Gemini LLM initialized successfully")
     elif llm_model.lower() == "local":
-        Settings.llm = Ollama(model="phi3:latest")
-        Settings.llm = my_llm
+        Settings.llm = Ollama(model="phi4:latest")
         logger.info("Local LLM initialized successfully")
     else:
         logger.error("Invalid model name. Use 'gemini', 'claude', or 'openai'")
@@ -472,12 +472,12 @@ def index_data(sample_data, input_type, llm_model):
         #TODO code for Claude embedding model
     elif llm_model.lower() == "gemini":
         my_embed_model = GoogleGenAIEmbedding(
-            model="models/text-embedding-004",
+            model="gemini-embedding-exp-03-07",
         )
     elif llm_model.lower() == "local":
         my_embed_model = OllamaEmbedding(
-            model_name="mxbai-embed-large:latest",
-            embed_batch_size=MY_EMBED_DIMENSION)
+            model_name= my_embed_model,
+        )
         Settings.embed_model = my_embed_model
         logger.info("Local embedding model initialized successfully")
     else:
@@ -520,7 +520,7 @@ def index_data(sample_data, input_type, llm_model):
             else:
                 logger.info(f"Documents loaded successfully from {sample_data}")
                 #log the beginning of the document
-                logger.info(f"First document: {documents[0].text[:50]}...")
+                #logger.info(f"First document: {documents[0].text[:50]}...")
             return documents
         elif os.path.isdir(sample_data):
             reader = SimpleDirectoryReader(input_dir=sample_data)
@@ -580,16 +580,15 @@ def store_documents(my_table_name, my_documents, my_model):
         if not api_key:
             raise ValueError("Gemini keys not found in environment variables")
         os.environ["GOOGLE_API_KEY"] = api_key
-        llm = GoogleGenAI(model="models/gemini-2.5-flash-preview-05-20")
+        llm = GoogleGenAI(model="models/gemini-2.5-flash-lite-preview-06-17")
         my_embed_model = GoogleGenAIEmbedding(
-                model="models/text-embedding-004",
-                embed_batch_size=32,
+                model="gemini-embedding-exp-03-07",
             )
     elif my_model.lower() == "local":
-        llm = Ollama(model="phi3:latest")
+        llm = Ollama(model="phi4:latest")
         my_embed_model = OllamaEmbedding(
-            model_name="mxbai-embed-large:latest",
-            embed_batch_size=MY_EMBED_DIMENSION)
+            model_name="quentinz/bge-base-zh-v1.5:latest",
+            )
     else:
         raise ValueError("Invalid model name. Use 'gemini', 'claude', or 'local'")      
     
@@ -603,7 +602,7 @@ def store_documents(my_table_name, my_documents, my_model):
             
     try:
         # Get connection string
-        my_connection_string = read_config('CONNECTIONS', 'postgres2')
+        my_connection_string = read_config('CONNECTIONS', 'postgres3')
         if not my_connection_string:
             logger.error("PostgreSQL connection string not found")
             raise ValueError("PostgreSQL connection string not found")
@@ -761,13 +760,13 @@ def main():
 
 if __name__ == "__main__":
     main()
-    test_RAG("vasilias_weddings_2025_05_24", "gemini")
-    #today_date = datetime.datetime.now().strftime("%Y_%m_%d")
-    #my_table = "vasilias_weddings_" + today_date
-    #my_documents1 = index_data("./data/VW_dataMar25.txt", "file",  "gemini")
-    #store_documents(my_table, my_documents1, "gemini")
-    #my_documents2 = index_data("./data/VWFAQ24052025.csv", "csv", "gemini")
-    #store_documents(my_table, my_documents2, "gemini")
+    #test_RAG("vasilias_weddings_2025_05_24", "gemini")
+    today_date = datetime.datetime.now().strftime("%Y_%m_%d")
+    my_table = "vasilias_weddings_" + today_date
+    my_documents1 = index_data("./data/VW_dataMar25.txt", "file", "local", "quentinz/bge-base-zh-v1.5:latest") 
+    store_documents(my_table, my_documents1, "local")
+    my_documents2 = index_data("./data/VWFAQ24052025.csv", "csv", "local", "quentinz/bge-base-zh-v1.5:latest") 
+    store_documents(my_table, my_documents2, "local")
     
     
     # vasilias_nikoklis_doc = index_data("https://vasilias.nikoklis.com/", "gemini")
